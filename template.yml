@@ -1,0 +1,306 @@
+---
+Description: Code Artifact CI/CD Pipeline
+
+Parameters:
+  GitRepoBranchName:
+    Type: String
+    Default: main
+  GithubCodeConnection:
+    Type: String
+    Default: arn:aws:codeconnections:us-east-1:654654293002:connection/8f44d31e-2762-4281-83a5-4cb29b35ef1e
+
+Resources:
+  BookstoreCodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: ''
+          Effect: Allow
+          Principal:
+            Service:
+            - codebuild.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: BookstoreCodeBuildPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource:
+            - "*"
+          - Effect: Allow
+            Action:
+            - s3:GetObject
+            - s3:GetObjectVersion
+            Resource:
+            - !Sub "arn:aws:s3:::${ArtifactBucket}/*"
+          - Effect: Allow
+            Action:
+            - s3:PutObject
+            Resource:
+            - !Sub "arn:aws:s3:::${ArtifactBucket}/*"
+          - Effect: Allow
+            Action:
+              - codebuild:CreateReportGroup
+              - codebuild:CreateReport
+              - codebuild:UpdateReport
+              - codebuild:BatchPutTestCases
+              - codebuild:BatchPutCodeCoverages
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - codeconnections:GetConnectionToken
+              - codeconnections:GetConnection
+            Resource: arn:aws:codeconnections:us-east-1:654654293002:connection/8f44d31e-2762-4281-83a5-4cb29b35ef1e
+
+  BookstoreCodePipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: ''
+          Effect: Allow
+          Principal:
+            Service:
+            - codepipeline.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: BookstoreCodePipelinePolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Action:
+            - s3:*
+            Resource: "*"
+            Effect: Allow
+          - Action:
+            - cloudformation:*
+            Resource: "*"
+            Effect: Allow
+          - Action:
+            - autoscaling:*
+            Resource: "*"
+            Effect: Allow
+          - Action:
+            - cloudwatch:PutMetricAlarm
+            Resource: "*"
+            Effect: Allow
+          - Action:
+            - elasticloadbalancing:DescribeLoadBalancers
+            - elasticloadbalancing:DescribeTargetGroups
+            Resource: "*"
+            Effect: Allow
+          - Action:
+            - codebuild:StartBuild
+            - codebuild:BatchGetBuilds
+            Resource: 
+              - !GetAtt CodeBuildProject.Arn
+            Effect: Allow
+          - Action:
+            - iam:PassRole
+            Resource: "*"
+            Effect: Allow
+          - Action:
+            - elasticbeanstalk:*
+            - ec2:*
+            Resource: "*"
+            Effect: Allow
+          - Action:
+            - codestar-connections:*
+            Resource: arn:aws:codeconnections:us-east-1:654654293002:connection/8f44d31e-2762-4281-83a5-4cb29b35ef1e
+            Effect: Allow  
+
+  ELBServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: ''
+            Effect: Allow
+            Principal:
+              Service: elasticbeanstalk.amazonaws.com
+            Action: 'sts:AssumeRole'
+            Condition:
+              StringEquals:
+                'sts:ExternalId': elasticbeanstalk
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/service-role/AWSElasticBeanstalkEnhancedHealth
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkManagedUpdatesCustomerRolePolicy
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref InstanceProfileRole
+
+  InstanceProfileRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkWebTier
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkWorkerTier
+
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub "${AWS::StackName}-CodeBuild"
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
+      ServiceRole: !GetAtt BookstoreCodeBuildRole.Arn
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: buildspec.yaml
+        
+  CodeTestProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub "${AWS::StackName}-AutomationTest"
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
+      ServiceRole: !GetAtt BookstoreCodeBuildRole.Arn
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: buildspec.yaml 
+  
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      ArtifactStore:
+        Type: S3
+        Location: !Ref ArtifactBucket
+      RoleArn: !GetAtt BookstoreCodePipelineRole.Arn
+      Stages: 
+      - Name: Source
+        Actions:
+          - InputArtifacts: []
+            ActionTypeId:
+              Version: '1'
+              Owner: AWS
+              Category: Source
+              Provider: CodeStarSourceConnection
+            OutputArtifacts:
+            - Name: BookstoreSourceArtifact
+            RunOrder: 1
+            Configuration:
+              ConnectionArn: !Ref GithubCodeConnection
+              FullRepositoryId: "LanLe1211/bookstore"
+              BranchName: "main"
+            Name: ApplicationSource
+
+      - Name: Build
+        Actions:
+        - Name: BookstoreSourceBuild
+          ActionTypeId:
+            Category: Build
+            Owner: AWS
+            Version: '1'
+            Provider: CodeBuild
+          OutputArtifacts:
+            - Name: BookstoreBuildArtifact
+          InputArtifacts:
+            - Name: BookstoreSourceArtifact
+          Configuration:
+             ProjectName: !Ref CodeBuildProject
+          RunOrder: '1'
+          
+      - Name: DeployToUAT
+        Actions:
+        - InputArtifacts:
+          - Name: BookstoreBuildArtifact
+          Name: DeployToUAT
+          ActionTypeId:
+            Category: Deploy
+            Owner: AWS
+            Version: '1'
+            Provider: ElasticBeanstalk
+          OutputArtifacts: []
+          Configuration:
+            ApplicationName: !Ref BookStoreApplication
+            EnvironmentName: !Ref BookStoreUATEnvironment
+          RunOrder: 1
+
+  BookStoreApplication:
+    Type: AWS::ElasticBeanstalk::Application
+    Properties:
+      ApplicationName: BookStoreApplication
+      Description: AWS Elastic Beanstalk Application
+ 
+  BookStoreUATEnvironment:
+    Type: AWS::ElasticBeanstalk::Environment
+    Properties:
+      ApplicationName: !Ref BookStoreApplication
+      Description: Bookstore UAT Environment
+      EnvironmentName: Bookstore-UAT-Env
+      SolutionStackName: 64bit Amazon Linux 2023 v4.4.1 running Corretto 11
+      OptionSettings:
+        - Namespace: 'aws:autoscaling:asg'
+          OptionName: MaxSize
+          Value: 1
+        - Namespace: 'aws:autoscaling:launchconfiguration'
+          OptionName: IamInstanceProfile
+          Value: !Ref InstanceProfile
+        - Namespace: 'aws:autoscaling:launchconfiguration'
+          OptionName: DisableIMDSv1
+          Value: true
+        - Namespace: 'aws:autoscaling:launchconfiguration'
+          OptionName: RootVolumeType
+          Value: gp3
+        - Namespace: 'aws:autoscaling:launchconfiguration'
+          OptionName: RootVolumeIOPS
+          Value: 3000
+        - Namespace: 'aws:autoscaling:launchconfiguration'
+          OptionName: RootVolumeThroughput
+          Value: 125   
+        - Namespace: 'aws:autoscaling:launchconfiguration'
+          OptionName: EC2KeyName
+          Value: project-keypair
+        - Namespace: 'aws:ec2:instances'
+          OptionName: InstanceTypes
+          Value: t3.micro,t3.small          
+        - Namespace: 'aws:elasticbeanstalk:environment'
+          OptionName: ServiceRole
+          Value: !Ref ELBServiceRole
+        - Namespace: 'aws:elasticbeanstalk:environment'
+          OptionName: EnvironmentType
+          Value: SingleInstance
+        - Namespace: 'aws:elasticbeanstalk:application:environment'
+          OptionName: M2
+          Value: /usr/local/apache-maven/bin
+        - Namespace: 'aws:elasticbeanstalk:application:environment'
+          OptionName: M2_HOME
+          Value: /usr/local/apache-maven
+        - Namespace: 'aws:elasticbeanstalk:application:environment'
+          OptionName: SERVER_PORT
+          Value: 5000
+       
+Outputs:
+  CodePipelineArtifactBucket:
+    Value: !Ref ArtifactBucket
