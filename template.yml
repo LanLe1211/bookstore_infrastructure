@@ -102,6 +102,7 @@ Resources:
             - codebuild:BatchGetBuilds
             Resource: 
               - !GetAtt CodeBuildProject.Arn
+              - !GetAtt CodeTestProject.Arn
             Effect: Allow
           - Action:
             - iam:PassRole
@@ -166,14 +167,14 @@ Resources:
       Name: !Sub "${AWS::StackName}-CodeBuild"
       Artifacts:
         Type: CODEPIPELINE
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: buildspec.yaml
       Environment:
         Type: LINUX_CONTAINER
         ComputeType: BUILD_GENERAL1_SMALL
         Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
       ServiceRole: !GetAtt BookstoreCodeBuildRole.Arn
-      Source:
-        Type: CODEPIPELINE
-        BuildSpec: buildspec.yaml
         
   CodeTestProject:
     Type: AWS::CodeBuild::Project
@@ -181,14 +182,14 @@ Resources:
       Name: !Sub "${AWS::StackName}-AutomationTest"
       Artifacts:
         Type: CODEPIPELINE
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: buildspec.yaml
       Environment:
         Type: LINUX_CONTAINER
         ComputeType: BUILD_GENERAL1_SMALL
-        Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
+        Image: aws/codebuild/standard:5.0-24.10.29
       ServiceRole: !GetAtt BookstoreCodeBuildRole.Arn
-      Source:
-        Type: CODEPIPELINE
-        BuildSpec: buildspec.yaml 
   
   Pipeline:
     Type: AWS::CodePipeline::Pipeline
@@ -214,6 +215,21 @@ Resources:
               FullRepositoryId: "LanLe1211/bookstore"
               BranchName: "main"
             Name: ApplicationSource
+            
+          - InputArtifacts: []
+            ActionTypeId:
+              Version: '1'
+              Owner: AWS
+              Category: Source
+              Provider: CodeStarSourceConnection
+            OutputArtifacts:
+            - Name: BookstoreTestSourceArtifact
+            RunOrder: 1
+            Configuration:
+              ConnectionArn: !Ref GithubCodeConnection
+              FullRepositoryId: "LanLe1211/bookstore_automation"
+              BranchName: "main"
+            Name: AutomationTestSource
 
       - Name: Build
         Actions:
@@ -245,7 +261,21 @@ Resources:
           Configuration:
             ApplicationName: !Ref BookStoreApplication
             EnvironmentName: !Ref BookStoreUATEnvironment
-          RunOrder: 1
+          RunOrder: '1'
+          
+      - Name: AutomationTest
+        Actions:
+        - Name: BookstoreAutomationTest
+          ActionTypeId:
+            Category: Test
+            Owner: AWS
+            Version: '1'
+            Provider: CodeBuild
+          InputArtifacts:
+            - Name: BookstoreTestSourceArtifact
+          Configuration:
+             ProjectName: !Ref CodeTestProject
+          RunOrder: '1'
 
   BookStoreApplication:
     Type: AWS::ElasticBeanstalk::Application
