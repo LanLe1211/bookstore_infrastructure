@@ -7,7 +7,7 @@ Parameters:
     Default: main
   GithubCodeConnection:
     Type: String
-    Default: arn:aws:codeconnections:us-east-1:654654293002:connection/8f44d31e-2762-4281-83a5-4cb29b35ef1e
+    Default: arn:aws:codeconnections:us-east-2:659898573182:connection/9ad4cc53-6992-417d-b3f0-036ecb02cb0a
 
 Resources:
   BookstoreCodeBuildRole:
@@ -42,7 +42,7 @@ Resources:
             - !Sub "arn:aws:s3:::${ArtifactBucket}/*"
           - Effect: Allow
             Action:
-            - s3:PutObject
+            - s3:PutObject 
             Resource:
             - !Sub "arn:aws:s3:::${ArtifactBucket}/*"
           - Effect: Allow
@@ -54,8 +54,7 @@ Resources:
               - codebuild:BatchPutCodeCoverages
             Resource: '*'
           - Effect: Allow
-            Action:
-              - codeconnections:GetConnectionToken
+            Action:    
               - codeconnections:GetConnection
             Resource: arn:aws:codeconnections:us-east-1:654654293002:connection/8f44d31e-2762-4281-83a5-4cb29b35ef1e
 
@@ -115,7 +114,7 @@ Resources:
             Effect: Allow
           - Action:
             - codestar-connections:*
-            Resource: arn:aws:codeconnections:us-east-1:654654293002:connection/8f44d31e-2762-4281-83a5-4cb29b35ef1e
+            Resource: arn:aws:codeconnections:us-east-2:659898573182:connection/9ad4cc53-6992-417d-b3f0-036ecb02cb0a
             Effect: Allow  
 
   ELBServiceRole:
@@ -277,6 +276,31 @@ Resources:
              ProjectName: !Ref CodeTestProject
           RunOrder: '1'
 
+      - Name: DeployToProduction
+        Actions:
+        - InputArtifacts: []
+          Name: ApproveDeployToProduction
+          ActionTypeId:
+            Category: Approval
+            Owner: AWS
+            Version: '1'
+            Provider: Manual
+          OutputArtifacts: []
+          RunOrder: '1'
+        - InputArtifacts:
+          - Name: BookstoreBuildArtifact
+          Name: DeployToProduction
+          ActionTypeId:
+            Category: Deploy
+            Owner: AWS
+            Version: '1'
+            Provider: ElasticBeanstalk
+          OutputArtifacts: []
+          Configuration:
+            ApplicationName: !Ref BookStoreApplication
+            EnvironmentName: !Ref BookStoreProductionEnvironment
+          RunOrder: '2'
+
   BookStoreApplication:
     Type: AWS::ElasticBeanstalk::Application
     Properties:
@@ -289,7 +313,7 @@ Resources:
       ApplicationName: !Ref BookStoreApplication
       Description: Bookstore UAT Environment
       EnvironmentName: Bookstore-UAT-Env
-      SolutionStackName: 64bit Amazon Linux 2023 v4.4.1 running Corretto 11
+      SolutionStackName: 64bit Amazon Linux 2023 v4.5.2 running Corretto 11
       OptionSettings:
         - Namespace: 'aws:autoscaling:asg'
           OptionName: MaxSize
@@ -330,7 +354,55 @@ Resources:
         - Namespace: 'aws:elasticbeanstalk:application:environment'
           OptionName: SERVER_PORT
           Value: 5000
-       
+          
+  BookStoreProductionEnvironment:
+    Type: AWS::ElasticBeanstalk::Environment
+    Properties:
+      ApplicationName: !Ref BookStoreApplication
+      Description: Bookstore Production Environment
+      EnvironmentName: Bookstore-Production-Env
+      SolutionStackName: 64bit Amazon Linux 2023 v4.5.2 running Corretto 11
+      OptionSettings:
+        - Namespace: 'aws:autoscaling:asg'
+          OptionName: MaxSize
+          Value: 1
+        - Namespace: 'aws:autoscaling:launchconfiguration'
+          OptionName: IamInstanceProfile
+          Value: !Ref InstanceProfile
+        - Namespace: 'aws:autoscaling:launchconfiguration'
+          OptionName: DisableIMDSv1
+          Value: true
+        - Namespace: 'aws:autoscaling:launchconfiguration'
+          OptionName: RootVolumeType
+          Value: gp3
+        - Namespace: 'aws:autoscaling:launchconfiguration'
+          OptionName: RootVolumeIOPS
+          Value: 3000
+        - Namespace: 'aws:autoscaling:launchconfiguration'
+          OptionName: RootVolumeThroughput
+          Value: 126   
+        - Namespace: 'aws:autoscaling:launchconfiguration'
+          OptionName: EC2KeyName
+          Value: project-keypair
+        - Namespace: 'aws:ec2:instances'
+          OptionName: InstanceTypes
+          Value: t3.micro,t3.small          
+        - Namespace: 'aws:elasticbeanstalk:environment'
+          OptionName: ServiceRole
+          Value: !Ref ELBServiceRole
+        - Namespace: 'aws:elasticbeanstalk:environment'
+          OptionName: EnvironmentType
+          Value: SingleInstance
+        - Namespace: 'aws:elasticbeanstalk:application:environment'
+          OptionName: M2
+          Value: /usr/local/apache-maven/bin
+        - Namespace: 'aws:elasticbeanstalk:application:environment'
+          OptionName: M2_HOME
+          Value: /usr/local/apache-maven
+        - Namespace: 'aws:elasticbeanstalk:application:environment'
+          OptionName: SERVER_PORT
+          Value: 5000
+
 Outputs:
   CodePipelineArtifactBucket:
     Value: !Ref ArtifactBucket

@@ -1,4 +1,16 @@
 # bookstore_infrastructure
 
+In terminal, navigate to infrastructure's project directory
+cd /Users/thuylanle/git/bookstore_infrastructure
+aws configure. Then enter access key in IAM Security credential
+secret access key must be saved during manual creation in AWS IAM Users
+
+Create yam file in infrastructure repo then run command to deploy to AWS
+
 Run command:
-`aws cloudformation deploy --template-file template.yml --stack-name bookstore-infra --parameter-overrides GithubConnectionArn=arn:aws:codeconnections:us-east-1:654654293002:connection/8f44d31e-2762-4281-83a5-4cb29b35ef1e --capabilities CAPABILITY_IAM`
+
+cd to the bookstore_infra
+
+
+`aws cloudformation deploy --template-file template.yml --stack-name bookstore-infra --parameter-overrides GithubConnectionArn=arn:aws:codeconnections:us-east-2:659898573182:connection/9ad4cc53-6992-417d-b3f0-036ecb02cb0a --capabilities CAPABILITY_IAM` 
+
