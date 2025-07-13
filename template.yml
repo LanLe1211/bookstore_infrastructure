@@ -190,7 +190,7 @@ Resources:
         Image: aws/codebuild/standard:7.0
       ServiceRole: !GetAtt BookstoreCodeBuildRole.Arn
   
-  Pipeline:
+  CodePipeline:
     Type: AWS::CodePipeline::Pipeline
     Properties:
       ArtifactStore:
@@ -313,7 +313,7 @@ Resources:
       ApplicationName: !Ref BookStoreApplication
       Description: Bookstore UAT Environment
       EnvironmentName: Bookstore-UAT-Env
-      SolutionStackName: 64bit Amazon Linux 2023 v4.5.2 running Corretto 11
+      SolutionStackName: 64bit Amazon Linux 2023 v4.5.2 running Corretto 11                         #Latest for Java
       OptionSettings:
         - Namespace: 'aws:autoscaling:asg'
           OptionName: MaxSize
@@ -338,7 +338,7 @@ Resources:
           Value: project-keypair
         - Namespace: 'aws:ec2:instances'
           OptionName: InstanceTypes
-          Value: t3.micro,t3.small          
+          Value: t3.micro,t3.small                                                                  #cheap
         - Namespace: 'aws:elasticbeanstalk:environment'
           OptionName: ServiceRole
           Value: !Ref ELBServiceRole
@@ -349,10 +349,10 @@ Resources:
           OptionName: M2
           Value: /usr/local/apache-maven/bin
         - Namespace: 'aws:elasticbeanstalk:application:environment'
-          OptionName: M2_HOME
+          OptionName: M2_HOME                                                                         #maven
           Value: /usr/local/apache-maven
         - Namespace: 'aws:elasticbeanstalk:application:environment'
-          OptionName: SERVER_PORT
+          OptionName: SERVER_PORT                                                               
           Value: 5000
           
   BookStoreProductionEnvironment:
