@@ -380,7 +380,7 @@ Resources:
           Value: 3000
         - Namespace: 'aws:autoscaling:launchconfiguration'
           OptionName: RootVolumeThroughput
-          Value: 126   
+          Value: 125   
         - Namespace: 'aws:autoscaling:launchconfiguration'
           OptionName: EC2KeyName
           Value: project-keypair
